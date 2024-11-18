@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#define LISTENPORT 8080
 #define PORTNUM 9100 
 #define MAX_CLIENTS 100
 #define NUM_SERVERS 1
@@ -22,7 +23,6 @@ server_info web_servers[] = {
     {"", PORTNUM},
     {"", PORTNUM}
 };
-//////////////////////////////////////////////////////////여기부분만 라운드 로빈으로 바꿔줘
 unsigned int murmur_hash(char* key) {
     unsigned int seed = 0x1234abcd;
     unsigned int m = 0x5bd1e995;
@@ -51,7 +51,7 @@ unsigned int murmur_hash(char* key) {
     h ^= h >> 15;
     return h % NUM_SERVERS;
 }
-////////////////////////////////////////////////////////////
+
 int load_balance(char* client_ip) {
     return murmur_hash(client_ip);
 }
@@ -70,11 +70,9 @@ void* handle_client(void* client_sock) {
         strcpy(client_ip, "Unknown");
     }
 
-    // 로드밸런싱을 통해 서버 선택
     int server_index = load_balance(client_ip);
     server_info selected_server = web_servers[server_index];
 
-    // 웹서버와 연결
     int server_socket;
     struct sockaddr_in server_addr;
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -89,7 +87,7 @@ void* handle_client(void* client_sock) {
     inet_pton(AF_INET, selected_server.ip, &server_addr.sin_addr);
 
     if (connect(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Connection to server failed");
+        perror("connect");
         close(client_socket);
         close(server_socket);
         return NULL;
@@ -101,7 +99,7 @@ void* handle_client(void* client_sock) {
         send(server_socket, buffer, bytes_received, 0);
     }
     else if (bytes_received < 0) {
-        perror("Error receiving from client");
+        perror("recv");
         close(client_socket);
         close(server_socket);
         return NULL;
@@ -112,7 +110,7 @@ void* handle_client(void* client_sock) {
         send(client_socket, buffer, bytes_received, 0);
     }
     else if (bytes_received < 0) {
-        perror("Error receiving from server");
+        perror("recv");
     }
 
     close(client_socket);
@@ -125,7 +123,7 @@ int main() {
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    // 서버 소켓 생성
+
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
         perror("Socket creation failed");
@@ -134,20 +132,19 @@ int main() {
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(8080);
+    server_addr.sin_port = htons(LISTENPORT);
 
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("Bind failed");
+        perror("bind");
         return -1;
     }
 
     listen(server_socket, MAX_CLIENTS);
-    printf("Load balancer listening on port 8080...\n");
 
     while (1) {
         int client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
         if (client_socket < 0) {
-            perror("Accept failed");
+            perror("accept");
             continue;
         }
         
@@ -155,7 +152,6 @@ int main() {
         new_sock = malloc(sizeof(int));
         *new_sock = client_socket;
         if (pthread_create(&tid, NULL, handle_client, (void*)new_sock) != 0) {
-            perror("Thread creation failed");
             close(client_socket);
             free(new_sock);
         }
