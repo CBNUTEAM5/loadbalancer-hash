@@ -9,10 +9,11 @@
 #include <unistd.h>
 
 #define LISTENPORT 8080
-#define PORTNUM 9100 
+#define PORTNUM 9100
 #define MAX_CLIENTS 100
-#define NUM_SERVERS 1
+#define NUM_SERVERS 2
 #define QUEUE_SIZE 20
+#define BUFFER_SIZE 4096
 
 typedef struct {
     char ip[16];
@@ -31,10 +32,14 @@ typedef struct {
     pthread_cond_t cond_non_full;
 } request_queue;
 
+typedef struct {
+    char key[256];
+    char value[BUFFER_SIZE];
+} CacheEntry;
+
 server_info web_servers[] = {
     {"10.198.138.212", PORTNUM},
     {"10.198.138.213", PORTNUM}
-
 };
 
 request_queue queue = {
@@ -45,6 +50,11 @@ request_queue queue = {
     .cond_non_empty = PTHREAD_COND_INITIALIZER,
     .cond_non_full = PTHREAD_COND_INITIALIZER
 };
+
+
+CacheEntry cache[5]; 
+int cache_count = 0;
+pthread_mutex_t cache_lock = PTHREAD_MUTEX_INITIALIZER;
 
 unsigned int murmur_hash(char* key) {
     unsigned int seed = 0x1234abcd;
@@ -104,6 +114,36 @@ int dequeue() {
     return client_socket;
 }
 
+int check_cache(char* key, char* value) {
+    pthread_mutex_lock(&cache_lock);
+    for (int i = 0; i < cache_count; i++) {
+        if (strcmp(cache[i].key, key) == 0) {
+            strcpy(value, cache[i].value);
+            pthread_mutex_unlock(&cache_lock);
+            return 1;         
+        }
+    }
+    pthread_mutex_unlock(&cache_lock);
+    return 0; 
+}
+
+void update_cache(char* key, char* value) {
+    pthread_mutex_lock(&cache_lock);
+    if (cache_count < 10) {
+        strcpy(cache[cache_count].key, key);
+        strcpy(cache[cache_count].value, value);
+        cache_count++;
+    }
+    else {
+
+        //처음 캐시 대체
+
+        strcpy(cache[0].key, key);
+        strcpy(cache[0].value, value);
+    }
+    pthread_mutex_unlock(&cache_lock);
+}
+
 void* handle_client(void* arg) {
     while (1) {
         int client_socket = dequeue();
@@ -118,51 +158,60 @@ void* handle_client(void* arg) {
             strcpy(client_ip, "Unknown");
         }
 
-        int server_index = load_balance(client_ip);
-        server_info selected_server = web_servers[server_index];
+        char buffer[BUFFER_SIZE];
+        memset(buffer, 0, BUFFER_SIZE);
 
-        int server_socket;
-        struct sockaddr_in server_addr;
-        server_socket = socket(AF_INET, SOCK_STREAM, 0);
-        if (server_socket == -1) {
-            perror("Socket creation failed for server");
-            close(client_socket);
-            continue;
-        }
-        memset(&server_addr, 0, sizeof(server_addr));
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_port = htons(selected_server.port);
-        inet_pton(AF_INET, selected_server.ip, &server_addr.sin_addr);
-
-        if (connect(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-            perror("connect");
-            close(client_socket);
-            close(server_socket);
-            continue;
-        }
-
-        char buffer[1024];
+        // 요청 읽기
         int bytes_received = recv(client_socket, buffer, sizeof(buffer), 0);
-        if (bytes_received > 0) {
-            send(server_socket, buffer, bytes_received, 0);
-        }
-        else if (bytes_received < 0) {
-            perror("recv");
+        if (bytes_received <= 0) {
             close(client_socket);
-            close(server_socket);
             continue;
         }
 
-        bytes_received = recv(server_socket, buffer, sizeof(buffer), 0);
-        if (bytes_received > 0) {
-            send(client_socket, buffer, bytes_received, 0);
-        }
-        else if (bytes_received < 0) {
-            perror("recv");
-        }
+        char cache_key[256];
+        sscanf(buffer, "GET %s HTTP/1.1", cache_key);
 
+        char cache_value[BUFFER_SIZE];
+        if (check_cache(cache_key, cache_value)) {
+            //hit
+
+            send(client_socket, cache_value, strlen(cache_value), 0);
+        }
+        else {
+            //miss 
+
+            int server_index = load_balance(client_ip);
+            server_info selected_server = web_servers[server_index];
+
+            int server_socket;
+            struct sockaddr_in server_addr;
+            server_socket = socket(AF_INET, SOCK_STREAM, 0);
+            if (server_socket == -1) {
+                perror("Socket creation failed for server");
+                close(client_socket);
+                continue;
+            }
+            memset(&server_addr, 0, sizeof(server_addr));
+            server_addr.sin_family = AF_INET;
+            server_addr.sin_port = htons(selected_server.port);
+            inet_pton(AF_INET, selected_server.ip, &server_addr.sin_addr);
+
+            if (connect(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+                perror("connect");
+                close(client_socket);
+                close(server_socket);
+                continue;
+            }
+
+            send(server_socket, buffer, bytes_received, 0);
+            int server_response = recv(server_socket, buffer, sizeof(buffer), 0);
+            if (server_response > 0) {
+                send(client_socket, buffer, server_response, 0);
+                update_cache(cache_key, buffer); 
+            }
+            close(server_socket);
+        }
         close(client_socket);
-        close(server_socket);
     }
     return NULL;
 }
