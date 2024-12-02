@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+
 #define LISTENPORT 5294
 #define PORTNUM3 5298
 #define PORTNUM1 5297
@@ -63,18 +64,18 @@ void* handle_client(void* arg) {
     int client_socket = *(int*)arg; 
     free(arg); 
 
-    // Å¬¶óÀÌ¾ğÆ® IP
+    // í´ë¼ì´ì–¸íŠ¸ IP
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
     getpeername(client_socket, (struct sockaddr*)&client_addr, &addr_len);
     char client_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
 
-    // ÇØ½Ã ·Îµå¹ë·±½Ì
+    // í•´ì‹œ ë¡œë“œë°¸ëŸ°ì‹±
     int server_index = load_balance(client_ip);
     server_info selected_server = web_servers[server_index];
 
-    // ¼­¹ö¿ÍÀÇ ¿¬°á
+    // ì„œë²„ì™€ì˜ ì—°ê²°
     int server_socket;
     struct sockaddr_in server_addr;
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -108,7 +109,7 @@ void* handle_client(void* arg) {
         return NULL;
     }
 
-    // ¼­¹ö -> Å¬¶ó
+    // ì„œë²„ -> í´ë¼
     while ((bytes_received = recv(server_socket, buffer, sizeof(buffer), 0)) > 0) {
         send(client_socket, buffer, bytes_received, 0);
     }
@@ -128,7 +129,7 @@ int main() {
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
-    // ¼­¹ö ¼ÒÄÏ »ı¼º
+    // ì„œë²„ ì†Œì¼“ ìƒì„±
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
         perror("Socket creation failed");
@@ -154,7 +155,7 @@ int main() {
 
     printf("Server listening on port %d\n", LISTENPORT);
 
-    // ½º·¹µå »ı¼º
+    // ìŠ¤ë ˆë“œ ìƒì„±
     while (1) {
         int client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &client_addr_len);
         if (client_socket < 0) {
