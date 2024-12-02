@@ -37,7 +37,7 @@ typedef struct {
     pthread_cond_t cond_non_full;
 } request_queue;
 
-// LRU 캐시 노드 구조체
+// LRU 캐시시
 typedef struct CacheNode {
     char key[1024];              
     char value[1024];            
@@ -119,7 +119,7 @@ CacheNode* cache_search(const char* key) {
     CacheNode* node = cache.head;
     while (node) {
         if (strcmp(node->key, key) == 0) {
-            // 캐시 히트 시, 노드를 맨 앞으로 이동
+            // 캐시 히트 시 ->  노드를 맨 앞으로 이동
             if (node != cache.head) {
                 // 노드 제거
                 if (node->prev) node->prev->next = node->next;
@@ -170,7 +170,6 @@ void* handle_client(void* arg) {
     while (1) {
         int client_socket = dequeue();
 
-        // 클라이언트 요청 수신
         char buffer[1024];
         int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
         if (bytes_received <= 0) {
