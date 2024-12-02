@@ -1,4 +1,4 @@
-Ä³½Ã
+ìºì‹œ
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,7 +18,7 @@
 #define MAX_CLIENTS 100
 #define NUM_SERVERS 3
 #define QUEUE_SIZE 10
-#define CACHE_SIZE 5 // Ä³½ÃÀÇ Å©±â
+#define CACHE_SIZE 5 
 
 typedef struct {
     char ip[16];
@@ -37,19 +37,19 @@ typedef struct {
     pthread_cond_t cond_non_full;
 } request_queue;
 
-// LRU Ä³½Ã ³ëµå ±¸Á¶Ã¼
+// LRU ìºì‹œ ë…¸ë“œ êµ¬ì¡°ì²´
 typedef struct CacheNode {
-    char key[1024];              // ¿äÃ» Å°
-    char value[1024];            // ÀÀ´ä °ª
-    struct CacheNode* prev;      // ÀÌÀü ³ëµå
-    struct CacheNode* next;      // ´ÙÀ½ ³ëµå
+    char key[1024];              
+    char value[1024];            
+    struct CacheNode* prev;      
+    struct CacheNode* next;     
 } CacheNode;
 
 typedef struct {
-    CacheNode* head;             // Ä³½ÃÀÇ ½ÃÀÛ ³ëµå
-    CacheNode* tail;             // Ä³½ÃÀÇ ³¡ ³ëµå
-    int size;                    // ÇöÀç Ä³½Ã Å©±â
-    pthread_mutex_t mutex;       // Ä³½Ã Á¢±Ù µ¿±âÈ­
+    CacheNode* head;             
+    CacheNode* tail;             
+    int size;                    // í˜„ì¬ ì‚¬ì´ì¦ˆ
+    pthread_mutex_t mutex;       // ìºì‹œ ë™ê¸°í™”
 } LRUCache;
 
 server_info web_servers[] = {
@@ -70,7 +70,6 @@ request_queue queue = {
 int current_server_index = 0;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-// LRU Ä³½Ã ÃÊ±âÈ­
 LRUCache cache = {
     .head = NULL,
     .tail = NULL,
@@ -78,7 +77,7 @@ LRUCache cache = {
     .mutex = PTHREAD_MUTEX_INITIALIZER
 };
 
-// ¶ó¿îµå ·Îºó ¹æ½ÄÀ¸·Î ¼­¹ö ¼±ÅÃ
+//RR
 int load_balance() {
     pthread_mutex_lock(&lock);
     int server_index = current_server_index;
@@ -87,7 +86,7 @@ int load_balance() {
     return server_index;
 }
 
-// Å¬¶óÀÌ¾ğÆ® ¿äÃ»À» Å¥¿¡ Ãß°¡
+
 void enqueue(int client_socket) {
     pthread_mutex_lock(&queue.mutex);
     while (queue.count == QUEUE_SIZE) {
@@ -100,7 +99,7 @@ void enqueue(int client_socket) {
     pthread_mutex_unlock(&queue.mutex);
 }
 
-// Å¬¶óÀÌ¾ğÆ® ¿äÃ»À» Å¥¿¡¼­ °¡Á®¿À±â
+
 int dequeue() {
     pthread_mutex_lock(&queue.mutex);
     while (queue.count == 0) {
@@ -114,20 +113,20 @@ int dequeue() {
     return client_socket;
 }
 
-// Ä³½Ã¿¡¼­ Å° °Ë»ö
+// ìºì‹œ ê²€ìƒ‰
 CacheNode* cache_search(const char* key) {
     pthread_mutex_lock(&cache.mutex);
     CacheNode* node = cache.head;
     while (node) {
         if (strcmp(node->key, key) == 0) {
-            // Ä³½Ã È÷Æ® ½Ã, ³ëµå¸¦ ¸Ç ¾ÕÀ¸·Î ÀÌµ¿
+            // ìºì‹œ íˆíŠ¸ ì‹œ, ë…¸ë“œë¥¼ ë§¨ ì•ìœ¼ë¡œ ì´ë™
             if (node != cache.head) {
-                // ³ëµå Á¦°Å
+                // ë…¸ë“œ ì œê±°
                 if (node->prev) node->prev->next = node->next;
                 if (node->next) node->next->prev = node->prev;
                 if (node == cache.tail) cache.tail = node->prev;
 
-                // ³ëµå¸¦ ¸Ç ¾ÕÀ¸·Î ÀÌµ¿
+                // ë…¸ë“œë¥¼ ë§¨ ì•ìœ¼ë¡œ ì´ë™
                 node->next = cache.head;
                 node->prev = NULL;
                 if (cache.head) cache.head->prev = node;
@@ -142,11 +141,11 @@ CacheNode* cache_search(const char* key) {
     return NULL;
 }
 
-// Ä³½Ã¿¡ »õ·Î¿î ³ëµå Ãß°¡
+
 void cache_add(const char* key, const char* value) {
     pthread_mutex_lock(&cache.mutex);
     if (cache.size >= CACHE_SIZE) {
-        // Ä³½Ã°¡ ²Ë Ã¡À¸¸é °¡Àå ¿À·¡µÈ ³ëµå Á¦°Å
+        // ê°€ì¥ ì˜¤ë˜ëœ ë…¸ë“œ ì œê±°
         CacheNode* old_tail = cache.tail;
         if (old_tail->prev) old_tail->prev->next = NULL;
         cache.tail = old_tail->prev;
@@ -154,7 +153,7 @@ void cache_add(const char* key, const char* value) {
         cache.size--;
     }
 
-    // »õ·Î¿î ³ëµå Ãß°¡
+    // ë…¸ë“œ ì¶”ê°€
     CacheNode* new_node = (CacheNode*)malloc(sizeof(CacheNode));
     strcpy(new_node->key, key);
     strcpy(new_node->value, value);
@@ -167,12 +166,11 @@ void cache_add(const char* key, const char* value) {
     pthread_mutex_unlock(&cache.mutex);
 }
 
-// Å¬¶óÀÌ¾ğÆ® ¿äÃ» Ã³¸®
 void* handle_client(void* arg) {
     while (1) {
         int client_socket = dequeue();
 
-        // Å¬¶óÀÌ¾ğÆ® ¿äÃ» ¼ö½Å
+        // í´ë¼ì´ì–¸íŠ¸ ìš”ì²­ ìˆ˜ì‹ 
         char buffer[1024];
         int bytes_received = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
         if (bytes_received <= 0) {
@@ -182,16 +180,16 @@ void* handle_client(void* arg) {
         }
         buffer[bytes_received] = '\0';
 
-        // Ä³½Ã È®ÀÎ
+        // ìºì‹œ í™•ì¸
         CacheNode* cached_response = cache_search(buffer);
         if (cached_response) {
-            // Ä³½Ã ÀÀ´ä ¹İÈ¯
+            // ìºì‹œ ì‘ë‹µ ë°˜í™˜
             send(client_socket, cached_response->value, strlen(cached_response->value), 0);
             close(client_socket);
             continue;
         }
 
-        // ¼­¹ö ¼±ÅÃ ¹× ¿¬°á
+        // ë¡œë“œë°¸ëŸ°ì‹±
         int server_index = load_balance();
         server_info selected_server = web_servers[server_index];
         int server_socket;
@@ -215,16 +213,16 @@ void* handle_client(void* arg) {
             continue;
         }
 
-        // ¼­¹ö·Î ¿äÃ» Àü´Ş
+    
         send(server_socket, buffer, bytes_received, 0);
 
-        // ¼­¹ö ÀÀ´ä ¼ö½Å
+    
         bytes_received = recv(server_socket, buffer, sizeof(buffer) - 1, 0);
         if (bytes_received > 0) {
             buffer[bytes_received] = '\0';
             send(client_socket, buffer, bytes_received, 0);
 
-            // ÀÀ´äÀ» Ä³½Ã¿¡ ÀúÀå
+            // ì‘ë‹µ ìºì‹œì— ì €ì¥
             cache_add(buffer, buffer);
         }
         else {
